@@ -170,24 +170,65 @@
         this._cancle()
         this._initMove()
       },
-      leftSwitchClick () {
-        if (!this.leftSwitchState) return
-        // 小于单步距离
-        if (Math.abs(this.xPos) < this.options.switchSingleStep) {
-          this.xPos = 0
-          return
+      _bindSlotEvents () {
+    // 重新绑定插槽事件，确保插槽始终有效
+    const leftSlot = this.$refs.wrap.querySelector('[slot="left-switch"]');
+    const rightSlot = this.$refs.wrap.querySelector('[slot="right-switch"]');
+    if (leftSlot) {
+      leftSlot.addEventListener('click', this.leftSwitchClick);
+    }
+    if (rightSlot) {
+      rightSlot.addEventListener('click', this.rightSwitchClick);
+    }
+  },
+     leftSwitchClick () {
+    if (!this.leftSwitchState) return;
+    // 确保点击后逻辑正确
+    if (Math.abs(this.xPos) < this.options.switchSingleStep) {
+      this.xPos = 0;
+    } else {
+      this.xPos += this.options.switchSingleStep;
+    }
+    // 确保插槽事件在更新后仍然有效
+    this.$emit('leftSwitchClicked', this.xPos);
+  },
+  rightSwitchClick () {
+    if (!this.rightSwitchState) return;
+    // 确保点击后逻辑正确
+    if ((this.realBoxWidth - this.width + this.xPos) < this.options.switchSingleStep) {
+      this.xPos = this.width - this.realBoxWidth;
+    } else {
+      this.xPos -= this.options.switchSingleStep;
+    }
+    // 确保插槽事件在更新后仍然有效
+    this.$emit('rightSwitchClicked', this.xPos);
+  },
+  _move () {
+    if (this.isHover) return;
+    this._cancle(); // 清除当前动画
+    this.reqFrame = requestAnimationFrame(() => {
+      const h = this.realBoxHeight / 2; // 实际高度
+      const w = this.realBoxWidth / 2; // 宽度
+      const { direction, waitTime } = this.options;
+      const { step } = this;
+
+      if (direction === 1) { // 上
+        if (Math.abs(this.yPos) >= h) {
+          this.$emit('ScrollEnd'); // 触发滚动结束事件
+          this.yPos = 0;
         }
-        this.xPos += this.options.switchSingleStep
-      },
-      rightSwitchClick () {
-        if (!this.rightSwitchState) return
-        // 小于单步距离
-        if ((this.realBoxWidth - this.width + this.xPos) < this.options.switchSingleStep) {
-          this.xPos = this.width - this.realBoxWidth
-          return
+        this.yPos -= step;
+      } else if (direction === 2) { // 左
+        if (Math.abs(this.xPos) >= w) {
+          this.$emit('ScrollEnd'); // 触发滚动结束事件
+          this.xPos = 0;
         }
-        this.xPos -= this.options.switchSingleStep
-      },
+        this.xPos -= step;
+      }
+      // 继续动画
+      this._move();
+    });
+  },
       _cancle () {
         cancelAnimationFrame(this.reqFrame || '')
       },
@@ -256,64 +297,6 @@
       leave () {
         if (this.hoverStopSwitch) this._startMove()
       },
-      _move () {
-        // 鼠标移入时拦截_move()
-        if (this.isHover) return
-        this._cancle() //进入move立即先清除动画 防止频繁touchMove导致多动画同时进行
-        this.reqFrame = requestAnimationFrame(
-          function () {
-            const h = this.realBoxHeight / 2  //实际高度
-            const w = this.realBoxWidth / 2 //宽度
-            let { direction, waitTime } = this.options
-            let { step } = this
-            if (direction === 1) { // 上
-              if (Math.abs(this.yPos) >= h) {
-                this.$emit('ScrollEnd')
-                this.yPos = 0
-              }
-              this.yPos -= step
-            } else if (direction === 0) { // 下
-              if (this.yPos >= 0) {
-                this.$emit('ScrollEnd')
-                this.yPos = h * -1
-              }
-              this.yPos += step
-            } else if (direction === 2) { // 左
-              if (Math.abs(this.xPos) >= w) {
-                this.$emit('ScrollEnd')
-                this.xPos = 0
-              }
-              this.xPos -= step
-            } else if (direction === 3) { // 右
-              if (this.xPos >= 0) {
-                this.$emit('ScrollEnd')
-                this.xPos = w * -1
-              }
-              this.xPos += step
-            }
-            if (this.singleWaitTime) clearTimeout(this.singleWaitTime)
-            if (!!this.realSingleStopHeight) { //是否启动了单行暂停配置
-              if (Math.abs(this.yPos) % this.realSingleStopHeight < step) { // 符合条件暂停waitTime
-                this.singleWaitTime = setTimeout(() => {
-                  this._move()
-                }, waitTime)
-              } else {
-                this._move()
-              }
-            } else if (!!this.realSingleStopWidth) {
-              if (Math.abs(this.xPos) % this.realSingleStopWidth < step) { // 符合条件暂停waitTime
-                this.singleWaitTime = setTimeout(() => {
-                  this._move()
-                }, waitTime)
-              } else {
-                this._move()
-              }
-            } else {
-              this._move()
-            }
-          }.bind(this)
-        )
-      },
       _initMove () {
         this.$nextTick(() => {
           const { switchDelay } = this.options
@@ -375,9 +358,12 @@
     },
     mounted () {
       this._initMove()
+      this._bindSlotEvents(); // 组件挂载时绑定插槽事件
     },
     watch: {
       data (newData, oldData) {
+         // 数据变化时重新绑定插槽事件
+    this._bindSlotEvents();
         this._dataWarm(newData)
         //监听data是否有变更
         if (!arrayEqual(newData, oldData)) {
